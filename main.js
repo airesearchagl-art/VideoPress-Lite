@@ -1,11 +1,13 @@
 import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
-import { fetchFile, toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
+import { fetchFile } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
 
 const SUPPORTED_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi"]);
 const LARGE_FILE_1GB = 1024 ** 3;
 const LARGE_FILE_2GB = 2 * 1024 ** 3;
 const SETTINGS_KEY = "videopress-lite-settings";
 const THEME_KEY = "videopress-lite-theme";
+const FFMPEG_CORE_URL = "/ffmpeg/ffmpeg-core.js";
+const FFMPEG_WASM_URL = "/ffmpeg/ffmpeg-core.wasm";
 
 const state = {
   ffmpeg: null,
@@ -59,6 +61,7 @@ init();
 function init() {
   restoreTheme();
   restoreSettings();
+  checkCrossOriginIsolation();
   bindEvents();
   refreshSettingsUi();
 }
@@ -213,6 +216,7 @@ async function compressVideo() {
     setProgress("完了", 100);
     notifyComplete();
   } catch (error) {
+    logErrorDetails(error);
     showError(toUserFacingError(error));
     setProgress("圧縮失敗", 0);
   } finally {
@@ -231,13 +235,13 @@ async function ensureFfmpeg() {
       }
     });
 
-    const baseUrl = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
     await state.ffmpeg.load({
-      coreURL: await toBlobURL(`${baseUrl}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${baseUrl}/ffmpeg-core.wasm`, "application/wasm"),
+      coreURL: FFMPEG_CORE_URL,
+      wasmURL: FFMPEG_WASM_URL,
     });
     state.ffmpegLoaded = true;
   } catch (error) {
+    logErrorDetails(error);
     throw new Error("ffmpeg-init-failed", { cause: error });
   }
 }
@@ -439,6 +443,19 @@ function clearMessages() {
   els.errorBox.classList.add("hidden");
   els.warningBox.textContent = "";
   els.errorBox.textContent = "";
+}
+
+function checkCrossOriginIsolation() {
+  console.log("crossOriginIsolated:", window.crossOriginIsolated);
+  if (!window.crossOriginIsolated) {
+    showError("ブラウザのcross-origin isolationが有効ではありません。");
+  }
+}
+
+function logErrorDetails(error) {
+  console.error(error);
+  console.error(error?.cause);
+  console.error(error?.stack);
 }
 
 function notifyComplete() {

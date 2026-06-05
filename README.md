@@ -56,9 +56,9 @@ Vercel設定の想定:
 
 `main` ブランチにpushすると、GitHub連携済みのVercelプロジェクトで自動再デプロイされる構成を想定しています。
 
-デプロイURL:
+## デプロイURL
 
-- 未設定。Vercelデプロイ後にURLを追記してください。
+https://video-press-lite.vercel.app/
 
 ## 今後の改善予定
 

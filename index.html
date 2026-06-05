@@ -59,12 +59,19 @@
             </div>
             <form class="settings-form" id="settingsForm">
               <label>
+                <span>プリセット</span>
+                <select id="compressionModeSelect">
+                  <option value="balanced" selected>標準</option>
+                  <option value="light">軽量モード</option>
+                </select>
+              </label>
+              <label>
                 <span>解像度</span>
                 <select id="widthSelect">
                   <option value="original">元サイズ維持</option>
                   <option value="1920">1920幅</option>
                   <option value="1600">1600幅</option>
-                  <option value="1280">1280幅</option>
+                  <option value="1280" selected>1280幅</option>
                   <option value="960">960幅</option>
                   <option value="720">720幅</option>
                   <option value="custom">カスタム</option>
@@ -75,16 +82,16 @@
                 <input id="customWidth" type="number" min="320" max="4096" step="2" value="1280" />
               </label>
               <label>
-                <span>CRF品質 <strong id="crfValue">28</strong></span>
-                <input id="crfRange" type="range" min="18" max="35" value="28" />
+                <span>CRF品質 <strong id="crfValue">30</strong></span>
+                <input id="crfRange" type="range" min="18" max="35" value="30" />
                 <small>高画質 ←→ 小容量</small>
               </label>
               <label>
                 <span>エンコード速度</span>
                 <select id="presetSelect">
-                  <option value="veryfast">veryfast</option>
+                  <option value="veryfast" selected>veryfast</option>
                   <option value="fast">fast</option>
-                  <option value="medium" selected>medium</option>
+                  <option value="medium">medium</option>
                   <option value="slow">slow</option>
                 </select>
               </label>

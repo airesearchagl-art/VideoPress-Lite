@@ -2,12 +2,22 @@ import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist
 import { fetchFile } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
 
 const SUPPORTED_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi"]);
+const LARGE_FILE_300MB = 300 * 1024 ** 2;
+const LARGE_FILE_500MB = 500 * 1024 ** 2;
 const LARGE_FILE_1GB = 1024 ** 3;
 const LARGE_FILE_2GB = 2 * 1024 ** 3;
+const HIGH_RESOLUTION_EDGE = 3000;
 const SETTINGS_KEY = "videopress-lite-settings";
 const THEME_KEY = "videopress-lite-theme";
 const FFMPEG_CORE_URL = "/ffmpeg/ffmpeg-core.js";
 const FFMPEG_WASM_URL = "/ffmpeg/ffmpeg-core.wasm";
+const LIGHT_MODE_SETTINGS = {
+  widthMode: "720",
+  customWidth: "1280",
+  crf: 32,
+  preset: "veryfast",
+  audio: 64,
+};
 
 const state = {
   ffmpeg: null,
@@ -32,6 +42,7 @@ const els = {
   infoResolution: document.querySelector("#infoResolution"),
   infoFps: document.querySelector("#infoFps"),
   settingsForm: document.querySelector("#settingsForm"),
+  compressionModeSelect: document.querySelector("#compressionModeSelect"),
   widthSelect: document.querySelector("#widthSelect"),
   customWidthWrap: document.querySelector("#customWidthWrap"),
   customWidth: document.querySelector("#customWidth"),
@@ -96,6 +107,7 @@ function bindEvents() {
   });
 
   els.settingsForm.addEventListener("input", () => {
+    applyCompressionMode();
     saveSettings();
     refreshSettingsUi();
     updateEstimate();
@@ -179,10 +191,26 @@ function renderFileInfo() {
 }
 
 function renderLargeFileWarning(file) {
+  const warnings = [];
+
+  if (file.size > LARGE_FILE_300MB) {
+    warnings.push("300MBを超える動画です。ブラウザ版ではメモリ制限により失敗する可能性があります。");
+  }
+  if (file.size > LARGE_FILE_500MB) {
+    warnings.push("500MBを超える動画です。本格運用ではElectron版またはローカルFFmpeg版を推奨します。");
+  }
   if (file.size > LARGE_FILE_2GB) {
-    showWarning("2GBを超える大容量動画です。ブラウザのメモリ制限により処理できない可能性が高いです。");
+    warnings.push("2GBを超える大容量動画です。ブラウザのメモリ制限により処理できない可能性が高いです。");
   } else if (file.size > LARGE_FILE_1GB) {
-    showWarning("1GBを超える大容量動画です。ブラウザのメモリ制限により処理できない可能性があります。");
+    warnings.push("1GBを超える大容量動画です。ブラウザのメモリ制限により処理できない可能性があります。");
+  }
+
+  if (getMaxVideoEdge(state.metadata) > HIGH_RESOLUTION_EDGE) {
+    warnings.push("3000pxを超える高解像度動画です。先に720幅または960幅へ縮小する設定を推奨します。");
+  }
+
+  if (warnings.length > 0) {
+    showWarning(warnings.join(" "));
   }
 }
 
@@ -249,9 +277,9 @@ async function ensureFfmpeg() {
 function buildFfmpegArgs(inputName, outputName) {
   const settings = getSettings();
   const args = ["-i", inputName];
-  const width = getTargetWidth();
+  const width = getEffectiveTargetWidth();
 
-  if (width && width < state.metadata.width) {
+  if (width && shouldApplyScale(width)) {
     args.push("-vf", `scale=${width}:-2`);
   }
 
@@ -278,9 +306,31 @@ function buildFfmpegArgs(inputName, outputName) {
 
 function getTargetWidth() {
   const settings = getSettings();
+  if (settings.compressionMode === "light") return 720;
   if (settings.widthMode === "original") return null;
   if (settings.widthMode === "custom") return clampEven(Number(settings.customWidth), 320, 4096);
   return Number(settings.widthMode);
+}
+
+function getEffectiveTargetWidth() {
+  const requestedWidth = getTargetWidth();
+  const sourceWidth = state.metadata?.width || 0;
+  const sourceMaxEdge = getMaxVideoEdge(state.metadata);
+
+  if (getSettings().compressionMode === "light") return 720;
+  if (sourceMaxEdge > HIGH_RESOLUTION_EDGE) {
+    if (requestedWidth) return Math.min(requestedWidth, 1920);
+    return sourceWidth > 1920 ? 1920 : Math.min(sourceWidth || 960, 960);
+  }
+  return requestedWidth;
+}
+
+function shouldApplyScale(targetWidth) {
+  return (
+    getSettings().compressionMode === "light" ||
+    getMaxVideoEdge(state.metadata) > HIGH_RESOLUTION_EDGE ||
+    targetWidth < state.metadata.width
+  );
 }
 
 function buildInputName(fileName) {
@@ -345,7 +395,7 @@ function estimateOutputSize() {
   const settings = getSettings();
   const meta = state.metadata;
   const duration = Math.max(meta.duration || 1, 1);
-  const targetWidth = getTargetWidth() || meta.width || 1280;
+  const targetWidth = getEffectiveTargetWidth() || meta.width || 1280;
   const targetHeight = meta.width && meta.height ? Math.round((targetWidth / meta.width) * meta.height) : 720;
   const pixelRatio = Math.min(1, (targetWidth * targetHeight) / Math.max(1, (meta.width || targetWidth) * (meta.height || targetHeight)));
   const crfFactor = Math.pow(2, (28 - settings.crf) / 6);
@@ -367,11 +417,18 @@ function bitrateForWidth(width) {
 
 function refreshSettingsUi() {
   els.crfValue.textContent = els.crfRange.value;
+  const lightMode = els.compressionModeSelect.value === "light";
+  els.widthSelect.disabled = lightMode;
+  els.customWidth.disabled = lightMode;
+  els.crfRange.disabled = lightMode;
+  els.presetSelect.disabled = lightMode;
+  els.audioSelect.disabled = lightMode;
   els.customWidthWrap.classList.toggle("hidden", els.widthSelect.value !== "custom");
 }
 
 function getSettings() {
   return {
+    compressionMode: els.compressionModeSelect.value,
     widthMode: els.widthSelect.value,
     customWidth: els.customWidth.value,
     crf: Number(els.crfRange.value),
@@ -388,11 +445,13 @@ function restoreSettings() {
   const saved = safeJsonParse(localStorage.getItem(SETTINGS_KEY));
   if (!saved) return;
 
+  setValueIfExists(els.compressionModeSelect, saved.compressionMode);
   setValueIfExists(els.widthSelect, saved.widthMode);
   setValueIfExists(els.customWidth, saved.customWidth);
   setValueIfExists(els.crfRange, saved.crf);
   setValueIfExists(els.presetSelect, saved.preset);
   setValueIfExists(els.audioSelect, saved.audio);
+  applyCompressionMode();
 }
 
 function toggleTheme() {
@@ -481,11 +540,18 @@ function showToast(message) {
 
 function toUserFacingError(error) {
   const text = `${error?.message || ""} ${error?.cause?.message || ""}`.toLowerCase();
+  if (
+    text.includes("memory") ||
+    text.includes("allocation") ||
+    text.includes("out of bounds") ||
+    text.includes("abort") ||
+    text.includes("aborted") ||
+    text.includes("runtimeerror")
+  ) {
+    return "動画が大きすぎるため、ブラウザ版では処理できません。720幅・CRF32・veryfastで再試行してください。";
+  }
   if (text.includes("ffmpeg-init-failed")) {
     return "ffmpegの初期化に失敗しました。ネットワーク接続、ブラウザ設定、またはCDNへのアクセスを確認してください。";
-  }
-  if (text.includes("memory") || text.includes("allocation") || text.includes("out of bounds")) {
-    return "メモリ不足の可能性があります。解像度を下げるか、短い動画で再試行してください。";
   }
   return "圧縮に失敗しました。形式、容量、ブラウザのメモリ制限を確認してください。";
 }
@@ -513,6 +579,20 @@ function pad2(value) {
 function clampEven(value, min, max) {
   const clamped = Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
   return clamped % 2 === 0 ? clamped : clamped - 1;
+}
+
+function applyCompressionMode() {
+  if (els.compressionModeSelect.value !== "light") return;
+
+  els.widthSelect.value = LIGHT_MODE_SETTINGS.widthMode;
+  els.customWidth.value = LIGHT_MODE_SETTINGS.customWidth;
+  els.crfRange.value = String(LIGHT_MODE_SETTINGS.crf);
+  els.presetSelect.value = LIGHT_MODE_SETTINGS.preset;
+  els.audioSelect.value = String(LIGHT_MODE_SETTINGS.audio);
+}
+
+function getMaxVideoEdge(metadata) {
+  return Math.max(metadata?.width || 0, metadata?.height || 0);
 }
 
 function safeJsonParse(value) {

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VideoPress Lite</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Browser Video Compression Tool</p>
+          <h1>VideoPress Lite</h1>
+          <p class="lead">動画をサーバーへ送信せず、ブラウザ内で圧縮します</p>
+        </div>
+        <button class="icon-button" id="themeToggle" type="button" aria-label="ダークモード切り替え" title="ダークモード切り替え">
+          <span id="themeIcon">☾</span>
+        </button>
+      </header>
+
+      <main class="workflow">
+        <section class="panel drop-panel">
+          <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="動画ファイルを投入">
+            <div class="drop-icon">↓</div>
+            <div>
+              <h2>動画ファイルを投入</h2>
+              <p>mp4 / mov / m4v / avi に対応。ドラッグ＆ドロップ、またはファイル選択を使用してください。</p>
+            </div>
+            <label class="primary-button file-button">
+              ファイルを選択
+              <input id="fileInput" type="file" accept=".mp4,.mov,.m4v,.avi,video/mp4,video/quicktime,video/x-msvideo" />
+            </label>
+          </div>
+          <div id="warningBox" class="notice warning hidden"></div>
+          <div id="errorBox" class="notice error hidden"></div>
+          <div id="toast" class="toast hidden"></div>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <div class="panel-heading">
+              <h2>元動画情報</h2>
+              <span class="status-chip" id="fileStatus">未選択</span>
+            </div>
+            <dl class="info-list">
+              <div><dt>ファイル名</dt><dd id="infoName">-</dd></div>
+              <div><dt>容量</dt><dd id="infoSize">-</dd></div>
+              <div><dt>再生時間</dt><dd id="infoDuration">-</dd></div>
+              <div><dt>解像度</dt><dd id="infoResolution">-</dd></div>
+              <div><dt>フレームレート</dt><dd id="infoFps">取得不可</dd></div>
+            </dl>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading">
+              <h2>圧縮設定</h2>
+              <span class="status-chip">H.264 / AAC</span>
+            </div>
+            <form class="settings-form" id="settingsForm">
+              <label>
+                <span>解像度</span>
+                <select id="widthSelect">
+                  <option value="original">元サイズ維持</option>
+                  <option value="1920">1920幅</option>
+                  <option value="1600">1600幅</option>
+                  <option value="1280">1280幅</option>
+                  <option value="960">960幅</option>
+                  <option value="720">720幅</option>
+                  <option value="custom">カスタム</option>
+                </select>
+              </label>
+              <label id="customWidthWrap" class="hidden">
+                <span>カスタム幅</span>
+                <input id="customWidth" type="number" min="320" max="4096" step="2" value="1280" />
+              </label>
+              <label>
+                <span>CRF品質 <strong id="crfValue">28</strong></span>
+                <input id="crfRange" type="range" min="18" max="35" value="28" />
+                <small>高画質 ←→ 小容量</small>
+              </label>
+              <label>
+                <span>エンコード速度</span>
+                <select id="presetSelect">
+                  <option value="veryfast">veryfast</option>
+                  <option value="fast">fast</option>
+                  <option value="medium" selected>medium</option>
+                  <option value="slow">slow</option>
+                </select>
+              </label>
+              <label>
+                <span>音声</span>
+                <select id="audioSelect">
+                  <option value="64">64 kbps</option>
+                  <option value="96" selected>96 kbps</option>
+                  <option value="128">128 kbps</option>
+                </select>
+              </label>
+            </form>
+          </article>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <div class="panel-heading">
+              <h2>容量予測</h2>
+              <span class="status-chip">概算</span>
+            </div>
+            <dl class="info-list">
+              <div><dt>元容量</dt><dd id="estimateOriginal">-</dd></div>
+              <div><dt>推定容量</dt><dd id="estimateOutput">-</dd></div>
+              <div><dt>推定削減率</dt><dd id="estimateSaving">-</dd></div>
+            </dl>
+            <p class="muted">推定値です。実際の容量とは異なる場合があります。</p>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading">
+              <h2>実行状況</h2>
+              <span class="status-chip" id="runState">待機中</span>
+            </div>
+            <button id="compressButton" class="primary-button wide" type="button" disabled>圧縮開始</button>
+            <div class="progress-wrap">
+              <div class="progress-meta">
+                <span id="progressLabel">動画を選択してください</span>
+                <strong id="progressPercent">0%</strong>
+              </div>
+              <progress id="progressBar" value="0" max="100"></progress>
+            </div>
+          </article>
+        </section>
+
+        <section id="resultPanel" class="panel result-panel hidden">
+          <div class="panel-heading">
+            <h2>結果</h2>
+            <span class="status-chip success">完了</span>
+          </div>
+          <div class="result-grid">
+            <dl class="info-list">
+              <div><dt>圧縮前</dt><dd id="resultBefore">-</dd></div>
+              <div><dt>圧縮後</dt><dd id="resultAfter">-</dd></div>
+              <div><dt>削減容量</dt><dd id="resultSaved">-</dd></div>
+              <div><dt>削減率</dt><dd id="resultRate">-</dd></div>
+            </dl>
+            <div class="result-actions">
+              <video id="resultVideo" controls></video>
+              <a id="downloadLink" class="primary-button" href="#" download>ダウンロード</a>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
